@@ -122,9 +122,11 @@ class RAGEvaluator:
 
     def evaluate_case(self, query: str, relevant_sources: Set[str]) -> Dict:
         result = self.pipeline.answer(query)
-        retrieved_chunks = result["retrieved_chunks"]
+        retrieved_chunks = result.get("reranked_candidates") or result["retrieved_chunks"]
+        final_chunks = result["retrieved_chunks"]
         context_texts = [chunk["text"] for chunk in result["compressed_chunks"]]
         answer = result["answer"]
+        relevance = self.answer_relevance(query, answer)
 
         return {
             "query": query,
@@ -133,15 +135,34 @@ class RAGEvaluator:
             "recall_at_10": self.recall_at_k(retrieved_chunks, relevant_sources, 10),
             "mrr": self.mrr(retrieved_chunks, relevant_sources),
             "faithfulness": self.faithfulness(answer, context_texts),
+            "relevance": relevance,
             "context_relevance": self.context_relevance(query, context_texts),
-            "answer_relevance": self.answer_relevance(query, answer),
+            "answer_relevance": relevance,
             "extractiveness_score": self.extractiveness_score(answer, context_texts),
+            "extractiveness": self.extractiveness_score(answer, context_texts),
+            "context_length_chars": result.get("context_length_chars", 0),
             "response_time_seconds": result["response_time_seconds"],
             "llm_model": result["llm_model"],
             "generation_error": result["generation_error"],
+            "draft_answer": result.get("draft_answer", ""),
+            "refined_answer": result.get("refined_answer", ""),
             "answer": answer,
             "retrieved_chunks": "; ".join(
-                f"{chunk['source']} p.{chunk['page']} faiss={chunk['faiss_score']:.4f} reranker={chunk['rerank_score']:.4f}"
+                f"{chunk['source']} p.{chunk['page']} title={chunk.get('title', '')} "
+                f"retrieval={chunk.get('retrieval_score') or 0.0:.4f} "
+                f"keyword={chunk.get('keyword_score') or 0.0:.4f} "
+                f"title_boost={chunk.get('title_boost') or 0.0:.4f} "
+                f"reranker={chunk['rerank_score']:.4f} "
+                f"reason={chunk.get('retrieval_reason', '')}"
+                for chunk in final_chunks
+            ),
+            "reranked_candidates": "; ".join(
+                f"{chunk['source']} p.{chunk['page']} title={chunk.get('title', '')} "
+                f"retrieval={chunk.get('retrieval_score') or 0.0:.4f} "
+                f"keyword={chunk.get('keyword_score') or 0.0:.4f} "
+                f"title_boost={chunk.get('title_boost') or 0.0:.4f} "
+                f"reranker={chunk['rerank_score']:.4f} "
+                f"reason={chunk.get('retrieval_reason', '')}"
                 for chunk in retrieved_chunks
             ),
         }
@@ -186,9 +207,11 @@ class RAGEvaluator:
             "recall_at_10",
             "mrr",
             "faithfulness",
+            "relevance",
             "context_relevance",
             "answer_relevance",
             "extractiveness_score",
+            "extractiveness",
             "response_time_seconds",
         ]
         summary = {"num_queries": len(rows)}
@@ -204,4 +227,3 @@ if __name__ == "__main__":
     results = evaluator.evaluate_csv(dataset)
     print(f"Saved {len(results)} rows to {EVALUATION_RESULTS_PATH}")
     print(RAGEvaluator.summarize(results))
-
