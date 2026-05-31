@@ -4,6 +4,7 @@ This script preserves source filename and page metadata so the downstream RAG
 pipeline can cite papers as `[Paper: file.pdf, Page N]`.
 """
 
+import csv
 import pickle
 from typing import List
 
@@ -21,9 +22,24 @@ from config import (
     CHUNKS_PATH,
     EMBEDDING_MODEL_NAME,
     FAISS_INDEX_PATH,
+    PAPER_METADATA_PATH,
     PAPERS_DIR,
     VECTOR_STORE_DIR,
 )
+
+
+def load_paper_titles() -> dict[str, str]:
+    """Load paper titles keyed by PDF filename."""
+
+    if not PAPER_METADATA_PATH.exists():
+        return {}
+
+    with open(PAPER_METADATA_PATH, newline="", encoding="utf-8") as file:
+        return {
+            row["pdf_file"].strip(): row["title"].strip()
+            for row in csv.DictReader(file)
+            if row.get("pdf_file") and row.get("title")
+        }
 
 
 def load_pdf_pages() -> List[Document]:
@@ -31,6 +47,7 @@ def load_pdf_pages() -> List[Document]:
 
     documents: List[Document] = []
     pdf_files = sorted(PAPERS_DIR.glob("*.pdf"))
+    paper_titles = load_paper_titles()
 
     if not pdf_files:
         raise FileNotFoundError(f"No PDF files found in {PAPERS_DIR}")
@@ -43,6 +60,7 @@ def load_pdf_pages() -> List[Document]:
             for page in pages:
                 page.metadata["source"] = pdf_path.name
                 page.metadata["paper"] = pdf_path.name
+                page.metadata["title"] = paper_titles.get(pdf_path.name, "")
                 # PyPDFLoader pages are zero-indexed; citations should be human
                 # readable and one-indexed.
                 page.metadata["page"] = int(page.metadata.get("page", 0)) + 1
@@ -70,6 +88,7 @@ def split_documents(documents: List[Document]) -> List[Document]:
         chunk.metadata["chunk_id"] = chunk_id
         chunk.metadata.setdefault("paper", chunk.metadata.get("source", "unknown"))
         chunk.metadata.setdefault("page", "unknown")
+        chunk.metadata.setdefault("title", "")
 
     print(f"Total chunks created: {len(chunks)}")
     return chunks
@@ -120,4 +139,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
