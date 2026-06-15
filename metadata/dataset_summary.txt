@@ -1,0 +1,18 @@
+Quantum Machine Learning Corpus Summary
+================================================
+papers downloaded: 30
+duplicates removed: 2
+
+papers per topic:
+- quantum kernel learning: 6
+- quantum support vector machine: 6
+- variational quantum classifier: 6
+- quantum neural network: 6
+- quantum feature map: 6
+
+rejections:
+- no required QML relevance term: 38
+- download failure: 1
+- rejected noisy topic: astronomy: 1
+
+final paper count: 30
